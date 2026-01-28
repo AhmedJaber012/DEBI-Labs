@@ -1,0 +1,158 @@
+services:
+  mysql:
+    platform: linux/amd64
+    image: mysql:5.7
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: metastore_db
+      MYSQL_USER: hive
+      MYSQL_PASSWORD: hive_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bigdata
+
+  namenode:
+    platform: linux/amd64
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=test-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+      - ./core-site.xml:/usr/local/hadoop/etc/hadoop/core-site.xml
+      - ./hdfs-site.xml:/usr/local/hadoop/etc/hadoop/conf/hdfs-site.xml
+      - ./yarn-site.xml:/usr/local/hadoop/etc/hadoop/conf/yarn-site.xml
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - bigdata
+
+  datanode:
+    platform: linux/amd64
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    environment:
+      - CLUSTER_NAME=test-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+      - ./core-site.xml:/usr/local/hadoop/etc/hadoop/core-site.xml
+      - ./hdfs-site.xml:/usr/local/hadoop/etc/hadoop/conf/hdfs-site.xml
+      - ./yarn-site.xml:/usr/local/hadoop/etc/hadoop/conf/yarn-site.xml
+    depends_on:
+      - namenode
+    ports:
+      - "9864:9864"
+    networks:
+      - bigdata
+
+  resourcemanager:
+    platform: linux/amd64
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    environment:
+      - CLUSTER_NAME=test-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    volumes:
+      - ./core-site.xml:/usr/local/hadoop/etc/hadoop/core-site.xml
+      - ./hdfs-site.xml:/usr/local/hadoop/etc/hadoop/conf/hdfs-site.xml
+      - ./yarn-site.xml:/usr/local/hadoop/etc/hadoop/conf/yarn-site.xml
+    ports:
+      - "8088:8088"
+    depends_on:
+      - namenode
+    networks:
+      - bigdata
+
+  nodemanager:
+    platform: linux/amd64
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager
+    environment:
+      - CLUSTER_NAME=test-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    volumes:
+      - ./core-site.xml:/usr/local/hadoop/etc/hadoop/core-site.xml
+      - ./hdfs-site.xml:/usr/local/hadoop/etc/hadoop/conf/hdfs-site.xml
+      - ./yarn-site.xml:/usr/local/hadoop/etc/hadoop/conf/yarn-site.xml
+    depends_on:
+      - resourcemanager
+    networks:
+      - bigdata
+
+  hive-metastore:
+    platform: linux/amd64
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    environment:
+      - CLUSTER_NAME=test-hadoop
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:mysql://mysql:3306/metastore_db?createDatabaseIfNotExist=true
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionDriverName=com.mysql.jdbc.Driver
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionUserName=hive
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionPassword=hive_pass
+      - HIVE_METASTORE_URI=thrift://hive-metastore:9083
+      - HIVE_SITE_CONF_hive_metastore_uris=thrift://hive-metastore:9083
+      - HDFS_NAMENODE_URI=hdfs://namenode:9000
+    depends_on:
+      - mysql
+      - namenode
+    ports:
+      - "9083:9083"
+    volumes:
+      - ./core-site.xml:/usr/local/hive/conf/core-site.xml
+      - ./hive-site.xml:/usr/local/hive/conf/hive-site.xml
+    networks:
+      - bigdata
+
+  sqoop:
+    platform: linux/amd64
+    image: veribilimiokulu/ubuntu_hadoop_hive_sqoop:3.0
+    container_name: sqoop
+    environment:
+      - CLUSTER_NAME=test-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    depends_on:
+      mysql:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    volumes:
+      - ./mysql-connector.jar:/usr/share/java/mysql-connector-java.jar
+      - ./core-site.xml:/usr/local/hadoop/etc/hadoop/core-site.xml
+      - ./hdfs-site.xml:/usr/local/hadoop/etc/hadoop/conf/hdfs-site.xml
+      - ./yarn-site.xml:/usr/local/hadoop/etc/hadoop/conf/yarn-site.xml
+      - ./hive-site.xml:/usr/local/hive/conf/hive-site.xml
+  
+    entrypoint: [ "/bin/bash", "-c", "sleep infinity" ]
+    networks:
+      - bigdata
+
+volumes:
+  mysql_data:
+  hadoop_namenode:
+  hadoop_datanode:
+
+networks:
+  bigdata:
+    driver: bridge
+
+
+
+
+
