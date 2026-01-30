@@ -1,0 +1,5 @@
+1,John_Doe,IT,6000.0
+2,Jane_Smith,HR,5500.0
+3,Michael_Brown,Finance,7000.0
+4,Emily_Davis,IT,6200.0
+5,William_Wilson,Marketing,5800.0
